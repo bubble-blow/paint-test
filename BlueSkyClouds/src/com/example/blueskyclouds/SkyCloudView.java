@@ -17,7 +17,7 @@ import android.view.View;
 
 public class SkyCloudView extends View {
 
-    private static final int CLOUD_COUNT = 6;
+    private static final int[] CLOUDS_PER_LAYER = new int[] { 2, 2, 2 };
 
     private final Paint skyPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint cloudBodyPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -73,27 +73,58 @@ public class SkyCloudView extends View {
 
     private void rebuildClouds(int w, int h) {
         clouds.clear();
+        random.setSeed(20260418L + w * 31L + h * 17L);
 
-        for (int i = 0; i < CLOUD_COUNT; i++) {
-            CloudSpec cloud = new CloudSpec();
+        for (int layer = 0; layer < CLOUDS_PER_LAYER.length; layer++) {
+            int count = CLOUDS_PER_LAYER[layer];
+            float depth = (float) layer / (CLOUDS_PER_LAYER.length - 1); // 0远景 1近景
 
-            float depth = (float) i / (CLOUD_COUNT - 1); // 0: 远景, 1: 近景
-            cloud.scale = lerp(0.38f, 1.0f, depth) * randomRange(0.92f, 1.08f);
-            cloud.cx = w * lerp(0.12f, 0.9f, (i + 0.5f) / CLOUD_COUNT) + randomRange(-w * 0.03f, w * 0.03f);
-            cloud.cy = h * lerp(0.16f, 0.5f, depth) + randomRange(-h * 0.025f, h * 0.025f);
+            for (int j = 0; j < count; j++) {
+                CloudSpec cloud = new CloudSpec();
 
-            cloud.width = w * lerp(0.18f, 0.31f, depth) * cloud.scale;
-            cloud.height = h * lerp(0.075f, 0.13f, depth) * cloud.scale;
+                // 每层有自己的随机横向分布，不再和尺寸绑定成单调序列
+                float lane = ((float) j + randomRange(0.15f, 0.85f)) / count;
+                cloud.cx = w * (0.08f + lane * 0.84f) + randomRange(-w * 0.08f, w * 0.08f);
 
-            cloud.alphaBody = (int) lerp(145, 235, depth);
-            cloud.alphaShadow = (int) lerp(26, 80, depth);
-            cloud.alphaHighlight = (int) lerp(85, 165, depth);
+                // 纵向按层控制范围，再在层内随机扰动
+                float topBand = lerp(0.14f, 0.34f, depth);
+                float bottomBand = lerp(0.3f, 0.56f, depth);
+                cloud.cy = h * randomRange(topBand, bottomBand);
 
-            cloud.softOffsetX = cloud.width * randomRange(0.08f, 0.16f);
-            cloud.softOffsetY = cloud.height * randomRange(0.1f, 0.2f);
+                float baseScale = lerp(0.48f, 1.0f, depth);
+                cloud.scale = baseScale * randomRange(0.8f, 1.18f);
 
-            clouds.add(cloud);
+                cloud.width = w * lerp(0.16f, 0.28f, depth) * cloud.scale;
+                cloud.height = h * lerp(0.07f, 0.12f, depth) * cloud.scale;
+
+                cloud.alphaBody = (int) lerp(150, 235, depth) + (int) randomRange(-12f, 12f);
+                cloud.alphaShadow = (int) lerp(24, 78, depth) + (int) randomRange(-8f, 8f);
+                cloud.alphaHighlight = (int) lerp(80, 160, depth) + (int) randomRange(-10f, 10f);
+
+                clampAlpha(cloud);
+
+                cloud.softOffsetX = cloud.width * randomRange(0.08f, 0.18f);
+                cloud.softOffsetY = cloud.height * randomRange(0.08f, 0.2f);
+
+                clouds.add(cloud);
+            }
         }
+    }
+
+    private void clampAlpha(CloudSpec cloud) {
+        cloud.alphaBody = clamp(cloud.alphaBody, 120, 245);
+        cloud.alphaShadow = clamp(cloud.alphaShadow, 12, 95);
+        cloud.alphaHighlight = clamp(cloud.alphaHighlight, 40, 180);
+    }
+
+    private int clamp(int value, int min, int max) {
+        if (value < min) {
+            return min;
+        }
+        if (value > max) {
+            return max;
+        }
+        return value;
     }
 
     private void drawSky(Canvas canvas, int width, int height) {
